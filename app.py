@@ -1,22 +1,88 @@
 import streamlit as st
-import pickle
-from sklearn.datasets import load_iris
+import pandas as pd
+import joblib
+import os
 
-iris = load_iris()
+# Page config
+st.set_page_config(page_title="Academic Warning Predictor", page_icon="🎓", layout="wide")
 
-# Load the trained model
-clf = pickle.load(open('iris_classifier.pkl', 'rb'))
+st.title("🎓 Academic Warning Prediction System")
 
-# Sidebar for user input
-st.sidebar.title('Iris Classifier')
-sepal_length = st.sidebar.slider('Sepal Length', 4.0, 8.0, 5.0)
-sepal_width = st.sidebar.slider('Sepal Width', 2.0, 4.5, 3.0)
-petal_length = st.sidebar.slider('Petal Length', 1.0, 7.0, 4.0)
-petal_width = st.sidebar.slider('Petal Width', 0.1, 2.5, 1.0)
+# Check if model file exists
+if "academic_warning_model.pkl" not in os.listdir("."):
+    st.error("❌ **Missing model file!**")
+    st.info("Upload `academic_warning_model.pkl` to fix this.")
+    st.stop()
 
-# Make predictions
-prediction = clf.predict([[sepal_length, sepal_width, petal_length, petal_width]])
+@st.cache_resource
+def load_model():
+    """Load model safely"""
+    try:
+        model = joblib.load("academic_warning_model.pkl")
+        st.success("✅ Model loaded successfully!")
+        return model
+    except Exception as e:
+        st.error(f"❌ Failed to load model: {str(e)[:100]}")
+        st.info("Try retraining with: `joblib.dump(model, 'academic_warning_model.pkl', protocol=4)`")
+        st.stop()
 
-# Display prediction
-st.write('## Prediction:')
-st.write(iris.target_names[prediction[0]])
+# Load model
+model = load_model()
+
+# Inputs - Match your original exactly
+st.header("📝 Enter Student Data")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    gpa = st.number_input("**GPA**", 0.0, 4.0, 2.5, 0.1)
+    credits = st.number_input("**Credits Registered**", 0, 30, 15)
+
+with col2:
+    absences = st.number_input("**Absences**", 0, 50, 5)
+    major = st.selectbox("**Major**", ["IT", "Business", "Economics", "Engineering"])
+
+# Create exact same DataFrame as original
+data = pd.DataFrame({
+    "gpa": [gpa],
+    "credits": [credits],
+    "absences": [absences],
+    "major": [major]
+})
+
+# Show inputs
+st.markdown("---")
+st.subheader("📊 Input Summary")
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("GPA", f"{gpa:.2f}")
+col2.metric("Credits", credits)
+col3.metric("Absences", absences)
+col4.metric("Major", major)
+
+# Predict button
+if st.button("🔮 **Make Prediction**", type="primary", use_container_width=True):
+    try:
+        prediction = model.predict(data)[0]
+        
+        st.markdown("### 📈 **Prediction Result**")
+        col_result, col_prob = st.columns([2, 1])
+        
+        with col_result:
+            if prediction == 1:
+                st.error("🚨 **ACADEMIC WARNING**")
+                st.markdown("**Student is at risk of academic warning**")
+            else:
+                st.success("✅ **GOOD STANDING**")
+                st.markdown("**Student is safe academically**")
+        
+        # Probability if available
+        if hasattr(model, 'predict_proba'):
+            probs = model.predict_proba(data)[0]
+            with col_prob:
+                st.metric("Risk Probability", f"{probs[1]*100:.1f}%")
+        
+    except Exception as e:
+        st.error(f"❌ Prediction failed: {str(e)}")
+
+st.markdown("---")
+st.caption("🎓 Academic Success Prediction System")
